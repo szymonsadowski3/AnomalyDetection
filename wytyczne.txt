@@ -1,0 +1,6 @@
+6. Wydajność detekcji anomalii w szeregach czasowych
+Udostępnione zostaną dane pomiarowe o natężeniu ruchu w postaci bazy relacyjnej.
+Przeglądnij dane.
+Opracuj algorytm wyktywający nagłą zmianę w wartościach pomiarowych świadczącą o anomalii.
+Zaimplementuj algorytm detekcji korzystając z dwóch różnych modeli danych i porównaj ich wydajność.
+
