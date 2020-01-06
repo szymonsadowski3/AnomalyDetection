@@ -49,12 +49,12 @@ $$ LANGUAGE plpgsql;
 
 
 
-CREATE OR REPLACE FUNCTION check_traffic_diff_for_anomaly(checked_detector_id int) RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION check_traffic_diff_for_anomaly(checked_detector_id int, interquartile_multiplier real default 1.5) RETURNS VOID AS $$
 DECLARE
   it_row record;
   thresholds neg_pos_outlier_thresholds;
 BEGIN
-  thresholds := get_neg_pos_outlier_values_for_traffic_difference(checked_detector_id);
+  thresholds := get_neg_pos_outlier_values_for_traffic_difference(checked_detector_id, interquartile_multiplier);
 
   FOR it_row IN
     (SELECT * FROM get_analytic_window_traffic_difference(checked_detector_id))
@@ -67,4 +67,6 @@ BEGIN
     END LOOP;
 END;
 $$ LANGUAGE plpgsql;
+
+-- TODO: dynamic interquartile_multiplier for cases like detector with id 3
 
