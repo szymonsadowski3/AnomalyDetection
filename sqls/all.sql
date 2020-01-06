@@ -22,3 +22,13 @@ DO $$
         end IF;
       END LOOP;
   END $$;
+
+
+CREATE FUNCTION get_percentile_for_detector(checked_detector_id int, percentile real) RETURNS int AS $$
+BEGIN
+  RETURN (select percentile_cont(percentile) within group (order by count)
+          from traffic WHERE detector_id=checked_detector_id
+          group by detector_id);
+END;
+$$ LANGUAGE plpgsql;
+
