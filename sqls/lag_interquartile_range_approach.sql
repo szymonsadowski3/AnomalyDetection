@@ -68,5 +68,12 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- TODO: dynamic interquartile_multiplier for cases like detector with id 3
+DO $$
+BEGIN
+  FOR i in 1 .. 10   -- i is integer automatically, not float4
+    LOOP
+      PERFORM check_traffic_diff_for_anomaly(i);
+    END LOOP;
+END $$;
 
+-- TODO: maybe dynamic interquartile_multiplier for cases like detector with id 3
