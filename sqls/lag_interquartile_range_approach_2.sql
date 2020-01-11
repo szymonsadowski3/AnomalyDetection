@@ -75,15 +75,23 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+create table how_much_same_differences_cache
+(
+  detector_id int,
+  difference_value int,
+  count int
+);
+
 
 CREATE OR REPLACE FUNCTION check_traffic_diff_for_anomaly(checked_detector_id int, interquartile_multiplier real default 1.5) RETURNS VOID AS $$
 DECLARE
   it_row record;
   thresholds neg_pos_outlier_thresholds;
   linear_regression_results slope_intercept_r2_coefficient;
-  IS_TREND_R2_THRESHOLD real := 0.75;
-  FREQUENCY_THRESHOLD int := 100;
+  IS_TREND_R2_THRESHOLD real := 0.9;
+  FREQUENCY_THRESHOLD int := 100; -- TODO: harcoded frequency threshold -> bit sketchy, this value should correspond to around 0.1% -> 3 standard deviations
   how_much_same_differences int;
+  is_record_in_cache_present int;
 BEGIN
   thresholds := get_neg_pos_outlier_values_for_traffic_difference(checked_detector_id, interquartile_multiplier);
 
@@ -91,16 +99,38 @@ BEGIN
     (SELECT * FROM get_analytic_window_traffic_difference(checked_detector_id))
     LOOP
       IF it_row.traffic_diff_ > thresholds.pos_outlier_threshold THEN
-        SELECT * into linear_regression_results FROM linear_regression_3point(
-           it_row.previous_1_count, it_row.previous_2_count, it_row.previous_3_count
-        );
 
-        IF linear_regression_results.r2_coefficient < IS_TREND_R2_THRESHOLD THEN
-          SELECT COUNT(1) INTO how_much_same_differences FROM get_analytic_window_traffic_difference(checked_detector_id) WHERE traffic_diff_=it_row.traffic_diff_;
-          if how_much_same_differences < FREQUENCY_THRESHOLD THEN
+        is_record_in_cache_present := (SELECT COUNT(1) FROM how_much_same_differences_cache WHERE
+                                    detector_id=checked_detector_id AND difference_value=it_row.traffic_diff_);
+
+        IF is_record_in_cache_present = 0 THEN
+          SELECT COUNT(1) INTO how_much_same_differences FROM
+                  get_analytic_window_traffic_difference(checked_detector_id) WHERE traffic_diff_=it_row.traffic_diff_;
+
+          INSERT INTO how_much_same_differences_cache(detector_id, difference_value, count)
+          VALUES (checked_detector_id, it_row.traffic_diff_, how_much_same_differences);
+        END IF;
+
+        SELECT count INTO how_much_same_differences FROM how_much_same_differences_cache
+        WHERE detector_id=checked_detector_id AND difference_value=it_row.traffic_diff_;
+
+
+        if how_much_same_differences < FREQUENCY_THRESHOLD THEN
+
+
+          SELECT * into linear_regression_results FROM linear_regression_3point(
+                                                           it_row.previous_1_count, it_row.previous_2_count, it_row.previous_3_count
+                                                         );
+
+          IF linear_regression_results.r2_coefficient < IS_TREND_R2_THRESHOLD THEN
             raise notice 'Noticed POSITIVE OUTLIER anomaly in detector % at: %. Difference between this reading and previous is % || (%, %, %) || %', checked_detector_id, it_row.starttime_, it_row.traffic_diff_, it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count, linear_regression_results.r2_coefficient;
           end if;
+
+
         end if;
+
+
+
       end IF;
     END LOOP;
 END;
@@ -109,10 +139,11 @@ $$ LANGUAGE plpgsql;
 -- max detector id -> 2159
 DO $$
   BEGIN
-    FOR i in 1 .. 10   -- i is integer automatically, not float4
+    FOR i in 1 .. 10
       LOOP
+        raise notice 'Starting calculation for detector %', i;
         PERFORM check_traffic_diff_for_anomaly(i);
       END LOOP;
   END $$;
 
--- TODO: maybe dynamic interquartile_multiplier for cases like detector with id 3   //fixed with trend analysis
+-- TODO: maybe dynamic interquartile_multiplier for cases like detector with id 3
