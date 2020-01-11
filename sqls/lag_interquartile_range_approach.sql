@@ -68,6 +68,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- max detector id -> 2159
 DO $$
 BEGIN
   FOR i in 1 .. 10   -- i is integer automatically, not float4

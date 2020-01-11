@@ -4,3 +4,13 @@ Przeglądnij dane.
 Opracuj algorytm wyktywający nagłą zmianę w wartościach pomiarowych świadczącą o anomalii.
 Zaimplementuj algorytm detekcji korzystając z dwóch różnych modeli danych i porównaj ich wydajność.
 
+
+
+Points after consultations:
+
+- zwiększyć okno analyticzne
+- odrzucić (?) pomiary, gdzie występują przerwy w pomiarach (albo oznaczyc jako potencjalna anomalia)
+- baza nosql do badania szeregow czasowych
+
+
+i z tym drugim rozwiazaniem, to pandas raczej lipa bo to ciagle jest postgres, wiec powiedzial, ze wolalby zeby uzyc jakas specjalna baze np nosqlową specjlanie przeznaczona do badania szeregow czasowych
