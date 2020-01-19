@@ -1,3 +1,5 @@
+CREATE TABLE detector_ids AS (SELECT DISTINCT detector_id FROM traffic);
+
 DROP FUNCTION get_analytic_window_traffic_difference(checked_detector_id int);
 DROP FUNCTION linear_regression_3point(first_pt int, second_pt int, third_pt int);
 DROP FUNCTION check_traffic_diff_for_anomaly(checked_detector_id int, interquartile_multiplier real);
@@ -17,13 +19,13 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION get_analytic_window_traffic_difference(checked_detector_id int)
   RETURNS TABLE(
-    starttime_ timestamp,
-    count_ smallint,
-    previous_1_count smallint,
-    previous_2_count smallint,
-    previous_3_count smallint,
-    traffic_diff_ smallint
-) AS $$
+                 starttime_ timestamp,
+                 count_ smallint,
+                 previous_1_count smallint,
+                 previous_2_count smallint,
+                 previous_3_count smallint,
+                 traffic_diff_ smallint
+               ) AS $$
 BEGIN
   RETURN QUERY (
     WITH ordered_series AS (
@@ -92,7 +94,11 @@ DECLARE
   FREQUENCY_THRESHOLD int := 100; -- TODO: harcoded frequency threshold -> bit sketchy, this value should correspond to around 0.1% -> 3 standard deviations
   how_much_same_differences int;
   is_record_in_cache_present int;
+  StartTime timestamptz;
+  EndTime timestamptz;
+  Delta double precision;
 BEGIN
+  StartTime := clock_timestamp();
   thresholds := get_neg_pos_outlier_values_for_traffic_difference(checked_detector_id, interquartile_multiplier);
 
   FOR it_row IN
@@ -101,11 +107,11 @@ BEGIN
       IF it_row.traffic_diff_ > thresholds.pos_outlier_threshold THEN
 
         is_record_in_cache_present := (SELECT COUNT(1) FROM how_much_same_differences_cache WHERE
-                                    detector_id=checked_detector_id AND difference_value=it_row.traffic_diff_);
+            detector_id=checked_detector_id AND difference_value=it_row.traffic_diff_);
 
         IF is_record_in_cache_present = 0 THEN
           SELECT COUNT(1) INTO how_much_same_differences FROM
-                  get_analytic_window_traffic_difference(checked_detector_id) WHERE traffic_diff_=it_row.traffic_diff_;
+            get_analytic_window_traffic_difference(checked_detector_id) WHERE traffic_diff_=it_row.traffic_diff_;
 
           INSERT INTO how_much_same_differences_cache(detector_id, difference_value, count)
           VALUES (checked_detector_id, it_row.traffic_diff_, how_much_same_differences);
@@ -133,6 +139,9 @@ BEGIN
 
       end IF;
     END LOOP;
+  EndTime := clock_timestamp();
+  Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
+  RAISE NOTICE 'Anomaly detection duration for detector [s] % = %', checked_detector_id, Delta;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -142,16 +151,19 @@ DO $$
     StartTime timestamptz;
     EndTime timestamptz;
     Delta double precision;
+    detector_id_iterator int;
   BEGIN
     StartTime := clock_timestamp();
 
-    FOR i in 1 .. 10
+    --     FOR i in 1 .. 10
+    FOR detector_id_iterator IN
+      SELECT * FROM detector_ids ORDER BY 1 LIMIT 10
       LOOP
-        raise notice 'Starting calculation for detector %', i;
-        PERFORM check_traffic_diff_for_anomaly(i);
+        raise notice 'Starting calculation for detector %', detector_id_iterator;
+        PERFORM check_traffic_diff_for_anomaly(detector_id_iterator);
       END LOOP;
 
     EndTime := clock_timestamp();
     Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
-    RAISE NOTICE 'Duration =%', Delta;
+    RAISE NOTICE 'Duration = %', Delta;
   END $$;
