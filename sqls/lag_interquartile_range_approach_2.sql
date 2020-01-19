@@ -138,12 +138,20 @@ $$ LANGUAGE plpgsql;
 
 -- max detector id -> 2159
 DO $$
+  DECLARE
+    StartTime timestamptz;
+    EndTime timestamptz;
+    Delta double precision;
   BEGIN
+    StartTime := clock_timestamp();
+
     FOR i in 1 .. 10
       LOOP
         raise notice 'Starting calculation for detector %', i;
         PERFORM check_traffic_diff_for_anomaly(i);
       END LOOP;
-  END $$;
 
--- TODO: maybe dynamic interquartile_multiplier for cases like detector with id 3
+    EndTime := clock_timestamp();
+    Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
+    RAISE NOTICE 'Duration =%', Delta;
+  END $$;
