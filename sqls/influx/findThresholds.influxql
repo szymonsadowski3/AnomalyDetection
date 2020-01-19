@@ -1,0 +1,13 @@
+SELECT
+    percentile_25 - 1.5*iqr as lower_threshold,
+    percentile_75 + 1.5*iqr as upper_threshold
+FROM
+(
+    SELECT
+        percentile(traffic_diff, 25) as percentile_25,
+        percentile(traffic_diff, 75) as percentile_75,
+        percentile(traffic_diff, 75) - percentile(traffic_diff, 25) as iqr
+    FROM (
+        SELECT non_negative_difference(count) AS traffic_diff from "sensors".."traffic"
+    )
+) GROUP BY detector_id
