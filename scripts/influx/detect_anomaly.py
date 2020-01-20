@@ -1,4 +1,10 @@
+import collections
+
 from influxdb import InfluxDBClient
+
+### CFG ###
+
+FREQUENCY_THRESHOLD = 100
 
 ### InfluxDB info ####
 influx_db_name = "sensors"
@@ -43,8 +49,44 @@ dataQuery = (
     """
 )
 
-for detector in detectors[:100]:
+occurences_aggregation = {}
+
+
+def nested_set(dict, keys, value):
+    for key in keys[:-1]:
+        dict = dict.setdefault(key, {})
+    dict[keys[-1]] = value
+
+
+def populate_diff_occurences_for_detector(detector):
+    detector_id = detector['detector_id']
+
+    distinct_diffs_query = """
+        SELECT DISTINCT(traffic_diff) FROM (
+            SELECT difference(count) AS traffic_diff from "sensors".."traffic" WHERE "detector_id" = '{}'
+        ) GROUP BY traffic_diff
+    """.format(detector['detector_id'])
+
+    distinct_diffs = list(influxClient.query(distinct_diffs_query))[0]
+
+    for distinct_object in distinct_diffs:
+        diff_value = distinct_object['distinct']
+        count_query = """
+            SELECT COUNT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") WHERE 
+            traffic_diff={}
+        """.format(diff_value)
+
+        how_many_occurences = list(influxClient.query(count_query))[0][0]['count']
+        # occurences_aggregation[detector][diff_value] = how_many_occurences
+        nested_set(occurences_aggregation, [detector_id, diff_value], how_many_occurences)
+
+
+for detector in detectors[:2]:
+    populate_diff_occurences_for_detector(detector)
     result = list(thresholds.get_points(tags=detector))
+
+# SELECT COUNT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") WHERE traffic_diff=4.00
+# SELECT DISTINCT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") GROUP BY traffic_diff
     if len(result) > 0:
         threshold_dict = result[0]
         print(threshold_dict)
