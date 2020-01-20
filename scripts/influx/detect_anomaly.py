@@ -45,7 +45,7 @@ dataQuery = (
     (
         SELECT difference(count) as diff from "sensors".."traffic"
     )
-    WHERE diff < {} or diff > {} group by detector_id
+    WHERE ({}) AND (diff < {} or diff > {}) group by detector_id
     """
 )
 
@@ -58,7 +58,7 @@ def nested_set(dict, keys, value):
     dict[keys[-1]] = value
 
 
-def populate_diff_occurences_for_detector(detector):
+def populate_diff_occurrence_for_detector(detector):
     detector_id = detector['detector_id']
 
     distinct_diffs_query = """
@@ -77,18 +77,32 @@ def populate_diff_occurences_for_detector(detector):
         """.format(diff_value)
 
         how_many_occurences = list(influxClient.query(count_query))[0][0]['count']
-        # occurences_aggregation[detector][diff_value] = how_many_occurences
         nested_set(occurences_aggregation, [detector_id, diff_value], how_many_occurences)
 
 
+def get_potential_anomaly_values_based_on_occurrence_frequency(detector_id):
+    frequences = occurences_aggregation[detector_id]
+
+    return sorted([key for key, value in frequences.items() if value <= FREQUENCY_THRESHOLD])
+
+
+def get_filter_by_list_of_values(list_of_values):
+    return " OR ".join(["diff = {}".format(value) for value in list_of_values])
+
+
 for detector in detectors[:2]:
-    populate_diff_occurences_for_detector(detector)
+    populate_diff_occurrence_for_detector(detector)
     result = list(thresholds.get_points(tags=detector))
 
-# SELECT COUNT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") WHERE traffic_diff=4.00
-# SELECT DISTINCT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") GROUP BY traffic_diff
     if len(result) > 0:
+        potential_anomaly_values = get_potential_anomaly_values_based_on_occurrence_frequency(detector['detector_id'])
+        potential_anomaly_values_filter = get_filter_by_list_of_values(potential_anomaly_values)
+
         threshold_dict = result[0]
         print(threshold_dict)
-        insertQuery = dataQuery.format(threshold_dict['lower_threshold'], threshold_dict['upper_threshold'])
+        insertQuery = dataQuery.format(
+            potential_anomaly_values_filter,
+            threshold_dict['lower_threshold'],
+            threshold_dict['upper_threshold']
+        )
         influxClient.query(insertQuery)
