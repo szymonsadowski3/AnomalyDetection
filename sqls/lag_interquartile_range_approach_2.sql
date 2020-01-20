@@ -24,7 +24,8 @@ CREATE OR REPLACE FUNCTION get_analytic_window_traffic_difference(checked_detect
                  previous_1_count smallint,
                  previous_2_count smallint,
                  previous_3_count smallint,
-                 traffic_diff_ smallint
+                 traffic_diff_ smallint,
+                 time_elapsed_from_previous_measurement interval
                ) AS $$
 BEGIN
   RETURN QUERY (
@@ -36,7 +37,8 @@ BEGIN
           LAG(count, 1) OVER (ORDER BY starttime) previous_1_count,
           LAG(count, 2) OVER (ORDER BY starttime) previous_2_count,
           LAG(count, 3) OVER (ORDER BY starttime) previous_3_count,
-          ABS(count - (LAG(count, 1) OVER ( ORDER BY starttime ))) traffic_diff
+          ABS(count - (LAG(count, 1) OVER ( ORDER BY starttime ))) traffic_diff,
+          starttime - LAG(starttime) OVER (ORDER BY starttime) time_elapsed_from_previous_measurement
         FROM ordered_series
   );
 END;
@@ -124,28 +126,36 @@ BEGIN
         if how_much_same_differences < FREQUENCY_THRESHOLD THEN
 
 
-          SELECT * into linear_regression_results FROM linear_regression_3point(
-                                                           it_row.previous_1_count, it_row.previous_2_count, it_row.previous_3_count
-                                                         );
+          SELECT * into linear_regression_results
+          FROM linear_regression_3point(it_row.previous_1_count, it_row.previous_2_count, it_row.previous_3_count);
 
           IF linear_regression_results.r2_coefficient < IS_TREND_R2_THRESHOLD THEN
-            raise notice 'Noticed POSITIVE OUTLIER anomaly in detector % at: %. Difference between this reading and previous is % || (%, %, %) || %', checked_detector_id, it_row.starttime_, it_row.traffic_diff_, it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count, linear_regression_results.r2_coefficient;
+            if (it_row.time_elapsed_from_previous_measurement  < interval '3 mins') THEN
+              raise notice 'Noticed POSITIVE OUTLIER anomaly in detector % at: %. '
+                'Difference between this reading and previous is % || History = (%, %, %)',
+                checked_detector_id, it_row.starttime_, it_row.traffic_diff_,
+                it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count;
+            ELSE
+              raise notice 'Noticed POTENTIAL (!) POSITIVE OUTLIER anomaly in detector % at: %. '
+                'Time elapsed from previous measurement = %. Difference between this reading and previous is % || '
+                'History = (%, %, %)',
+                checked_detector_id, it_row.starttime_, it_row.time_elapsed_from_previous_measurement,
+                it_row.traffic_diff_, it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count;
+            end if;
           end if;
 
-
         end if;
-
-
 
       end IF;
     END LOOP;
   EndTime := clock_timestamp();
   Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
-  RAISE NOTICE 'Anomaly detection duration for detector [s] % = %', checked_detector_id, Delta;
+  RAISE NOTICE 'Finished! Anomaly detection duration for detector [s] % = %', checked_detector_id, Delta;
 END;
 $$ LANGUAGE plpgsql;
 
--- max detector id -> 2159
+
+
 DO $$
   DECLARE
     StartTime timestamptz;
@@ -155,9 +165,8 @@ DO $$
   BEGIN
     StartTime := clock_timestamp();
 
-    --     FOR i in 1 .. 10
     FOR detector_id_iterator IN
-      SELECT * FROM detector_ids ORDER BY 1 LIMIT 10
+      SELECT * FROM detector_ids ORDER BY 1 LIMIT 10 -- TODO: change limit if you want to run detection on full data
       LOOP
         raise notice 'Starting calculation for detector %', detector_id_iterator;
         PERFORM check_traffic_diff_for_anomaly(detector_id_iterator);
