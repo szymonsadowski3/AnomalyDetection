@@ -43,6 +43,7 @@ def generate_influx_points(records):
             tags[tag_label] = record[tag_label]
         for field_label in schema['columns_to_fields']:
             fields[field_label] = record[field_label]
+            
         influx_points.append({
             "measurement": schema['table_name_to_measurement'],
             "tags": tags,

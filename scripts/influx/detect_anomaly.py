@@ -25,7 +25,7 @@ thresholds = influxClient.query(
                 percentile(traffic_diff, 75) - percentile(traffic_diff, 25) as iqr
             FROM 
             (
-                SELECT non_negative_difference(count) AS traffic_diff from "sensors".."traffic"
+                SELECT difference(count) AS traffic_diff from "sensors".."traffic"
             )
         ) group by detector_id 
         """
@@ -37,9 +37,9 @@ dataQuery = (
     INTO "sensors".."anomalies"
     FROM 
     (
-        SELECT non_negative_difference(count) from "sensors".."traffic" group by *
+        SELECT difference(count) as diff from "sensors".."traffic"
     )
-    WHERE diff < {} or diff > {} group by *
+    WHERE diff < {} or diff > {} group by detector_id
     """
 )
 
@@ -47,4 +47,6 @@ for detector in detectors[:100]:
     result = list(thresholds.get_points(tags=detector))
     if len(result) > 0:
         threshold_dict = result[0]
-        influxClient.query(dataQuery.format(threshold_dict['lower_threshold'], threshold_dict['upper_threshold']))
+        print(threshold_dict)
+        insertQuery = dataQuery.format(threshold_dict['lower_threshold'], threshold_dict['upper_threshold'])
+        influxClient.query(insertQuery)
