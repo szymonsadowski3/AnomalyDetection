@@ -1,6 +1,7 @@
 import collections
 
 from influxdb import InfluxDBClient
+import time
 
 ### CFG ###
 
@@ -16,7 +17,7 @@ result = influxClient.query(
     """
 )
 
-detectors = [{dict['key'] : dict['value']} for dict in list(result.get_points())]
+detectors = [{dict['key']: dict['value']} for dict in list(result.get_points())]
 
 thresholds = influxClient.query(
         """
@@ -90,7 +91,12 @@ def get_filter_by_list_of_values(list_of_values):
     return " OR ".join(["diff = {}".format(value) for value in list_of_values])
 
 
+start_total = time.time()
+
 for detector in detectors[:2]:
+    print("Detecting anomalies for detector {}...".format(detector['detector_id']))
+    start = time.time()
+
     populate_diff_occurrence_for_detector(detector)
     result = list(thresholds.get_points(tags=detector))
 
@@ -106,3 +112,10 @@ for detector in detectors[:2]:
             threshold_dict['upper_threshold']
         )
         influxClient.query(insertQuery)
+
+    end = time.time()
+    print("Finished! Detected anomalies for detector {} in time [s] = {} \n".format(detector['detector_id'], end-start))
+
+end_total = time.time()
+
+print("Finished whole process! Total duration time [s] = {}".format(end_total - start_total))
