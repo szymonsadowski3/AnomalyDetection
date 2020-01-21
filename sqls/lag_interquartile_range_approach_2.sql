@@ -1,5 +1,28 @@
 CREATE TABLE detector_ids AS (SELECT DISTINCT detector_id FROM traffic);
 
+--DROP TABLE detected_anomalies;
+create table detected_anomalies
+(
+  checked_detector_id int,
+  measurement_start_time timestamp,
+  traffic_difference int,
+  r2_fit_of_trend_in_analytical_window real,
+  is_only_a_potential_anomaly boolean,
+  time_elapsed_from_previous_measurement interval,
+  insert_dt TIMESTAMP default NOW()
+);
+
+--DROP TABLE anomaly_detection_durations;
+create table anomaly_detection_durations
+(
+  checked_detector_id int,
+  duration_in_seconds real,
+  insert_dt TIMESTAMP default NOW(),
+  is_total_duration boolean default FALSE
+);
+
+
+
 DROP FUNCTION get_analytic_window_traffic_difference(checked_detector_id int);
 DROP FUNCTION linear_regression_3point(first_pt int, second_pt int, third_pt int);
 DROP FUNCTION check_traffic_diff_for_anomaly(checked_detector_id int, interquartile_multiplier real);
@@ -93,7 +116,11 @@ DECLARE
   thresholds neg_pos_outlier_thresholds;
   linear_regression_results slope_intercept_r2_coefficient;
   IS_TREND_R2_THRESHOLD real := 0.9;
-  FREQUENCY_THRESHOLD int := 100; -- TODO: harcoded frequency threshold -> bit sketchy, this value should correspond to around 0.1% -> 3 standard deviations
+
+  -- TODO: frequency threshold -> this value should correspond to only around 0.1% of values -> 3 standard deviations
+  FREQUENCY_THRESHOLD int := 100;
+  --
+
   how_much_same_differences int;
   is_record_in_cache_present int;
   StartTime timestamptz;
@@ -135,12 +162,24 @@ BEGIN
                 'Difference between this reading and previous is % || History = (%, %, %)',
                 checked_detector_id, it_row.starttime_, it_row.traffic_diff_,
                 it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count;
+              INSERT INTO detected_anomalies(
+                checked_detector_id, measurement_start_time, traffic_difference, r2_fit_of_trend_in_analytical_window
+               ) VALUES (
+                checked_detector_id, it_row.starttime_, it_row.traffic_diff_, linear_regression_results.r2_coefficient
+               );
             ELSE
               raise notice 'Noticed POTENTIAL (!) POSITIVE OUTLIER anomaly in detector % at: %. '
                 'Time elapsed from previous measurement = %. Difference between this reading and previous is % || '
                 'History = (%, %, %)',
                 checked_detector_id, it_row.starttime_, it_row.time_elapsed_from_previous_measurement,
                 it_row.traffic_diff_, it_row.previous_3_count, it_row.previous_2_count, it_row.previous_1_count;
+              INSERT INTO detected_anomalies(
+                  checked_detector_id, measurement_start_time, traffic_difference,
+                  r2_fit_of_trend_in_analytical_window, is_only_a_potential_anomaly, time_elapsed_from_previous_measurement
+              ) VALUES (
+                checked_detector_id, it_row.starttime_, it_row.traffic_diff_,
+                linear_regression_results.r2_coefficient, TRUE, it_row.time_elapsed_from_previous_measurement
+              );
             end if;
           end if;
 
@@ -151,6 +190,7 @@ BEGIN
   EndTime := clock_timestamp();
   Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
   RAISE NOTICE 'Finished! Anomaly detection duration for detector [s] % = %', checked_detector_id, Delta;
+  INSERT INTO anomaly_detection_durations(checked_detector_id, duration_in_seconds) VALUES(checked_detector_id, Delta);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -163,10 +203,15 @@ DO $$
     Delta double precision;
     detector_id_iterator int;
   BEGIN
+    TRUNCATE TABLE anomaly_detection_durations;
+    TRUNCATE TABLE detected_anomalies;
+
     StartTime := clock_timestamp();
 
     FOR detector_id_iterator IN
-      SELECT * FROM detector_ids ORDER BY 1 LIMIT 10 -- TODO: change limit if you want to run detection on full data
+      SELECT * FROM detector_ids ORDER BY 1
+--       LIMIT 10
+      -- comment out limit if you want to run detection on full data
       LOOP
         raise notice 'Starting calculation for detector %', detector_id_iterator;
         PERFORM check_traffic_diff_for_anomaly(detector_id_iterator);
@@ -174,5 +219,6 @@ DO $$
 
     EndTime := clock_timestamp();
     Delta := (extract(epoch from EndTime) - extract(epoch from StartTime));
-    RAISE NOTICE 'Duration = %', Delta;
+    RAISE NOTICE 'TOTAL Duration = %', Delta;
+    INSERT INTO anomaly_detection_durations(duration_in_seconds, is_total_duration) VALUES(Delta, TRUE);
   END $$;
