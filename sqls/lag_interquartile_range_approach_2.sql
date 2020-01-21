@@ -115,7 +115,7 @@ DECLARE
   it_row record;
   thresholds neg_pos_outlier_thresholds;
   linear_regression_results slope_intercept_r2_coefficient;
-  IS_TREND_R2_THRESHOLD real := 0.9;
+  IS_TREND_R2_THRESHOLD real := 0.9; -- value determined empirically
 
   -- TODO: frequency threshold -> this value should correspond to only around 0.1% of values -> 3 standard deviations
   FREQUENCY_THRESHOLD int := 100;
@@ -210,7 +210,7 @@ DO $$
 
     FOR detector_id_iterator IN
       SELECT * FROM detector_ids ORDER BY 1
---       LIMIT 10
+      LIMIT 10
       -- comment out limit if you want to run detection on full data
       LOOP
         raise notice 'Starting calculation for detector %', detector_id_iterator;
