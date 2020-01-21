@@ -46,7 +46,7 @@ dataQuery = (
     (
         SELECT difference(count) as diff from "sensors".."traffic"
     )
-    WHERE ({}) AND diff < {} or diff > {} group by detector_id
+    WHERE {} diff < {} or diff > {} group by detector_id
     """
 )
 
@@ -102,7 +102,10 @@ for detector in detectors:
 
     if len(result) > 0:
         potential_anomaly_values = get_potential_anomaly_values_based_on_occurrence_frequency(detector['detector_id'])
-        potential_anomaly_values_filter = get_filter_by_list_of_values(potential_anomaly_values)
+        potential_anomaly_values_filter = (
+            "({}) AND".format(get_filter_by_list_of_values(potential_anomaly_values))
+            if len(potential_anomaly_values) > 0 else ""
+        )
 
         threshold_dict = result[0]
         print(threshold_dict)
