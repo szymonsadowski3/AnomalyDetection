@@ -46,7 +46,7 @@ dataQuery = (
     (
         SELECT difference(count) as diff from "sensors".."traffic"
     )
-    WHERE ({}) AND (diff < {} or diff > {}) group by detector_id
+    WHERE ({}) AND diff < {} or diff > {} group by detector_id
     """
 )
 
@@ -93,7 +93,7 @@ def get_filter_by_list_of_values(list_of_values):
 
 start_total = time.time()
 
-for detector in detectors[:2]:
+for detector in detectors:
     print("Detecting anomalies for detector {}...".format(detector['detector_id']))
     start = time.time()
 
@@ -111,6 +111,7 @@ for detector in detectors[:2]:
             threshold_dict['lower_threshold'],
             threshold_dict['upper_threshold']
         )
+        print(insertQuery)
         influxClient.query(insertQuery)
 
     end = time.time()
