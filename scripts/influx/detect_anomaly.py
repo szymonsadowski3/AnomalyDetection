@@ -44,9 +44,9 @@ dataQuery = (
     INTO "sensors".."anomalies"
     FROM 
     (
-        SELECT difference(count) as diff from "sensors".."traffic"
+        SELECT difference(count) as diff from "sensors".."traffic" where detector_id = {}
     )
-    WHERE {} diff < {} or diff > {} group by detector_id
+    WHERE ({} diff < {} or diff > {}) and detector_id = {}
     """
 )
 
@@ -110,6 +110,7 @@ for detector in detectors:
         threshold_dict = result[0]
         print(threshold_dict)
         insertQuery = dataQuery.format(
+            detector['detector_id'],
             potential_anomaly_values_filter,
             threshold_dict['lower_threshold'],
             threshold_dict['upper_threshold']
