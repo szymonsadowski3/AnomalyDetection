@@ -203,14 +203,18 @@ DO $$
     Delta double precision;
     detector_id_iterator int;
   BEGIN
-    TRUNCATE TABLE anomaly_detection_durations;
-    TRUNCATE TABLE detected_anomalies;
+    -- TODO replace below with delete for particular detector_id ?
+--     TRUNCATE TABLE anomaly_detection_durations;
+--     TRUNCATE TABLE detected_anomalies;
 
     StartTime := clock_timestamp();
 
     FOR detector_id_iterator IN
-      SELECT * FROM detector_ids ORDER BY 1
---       LIMIT 10
+--       SELECT * FROM detector_ids
+--       WHERE detector_id > 100 ORDER BY 1 LIMIT 500
+
+    SELECT * FROM detector_ids
+    WHERE detector_id > (SELECT MAX(checked_detector_id) FROM anomaly_detection_durations) ORDER BY 1 LIMIT 300
       -- comment out limit if you want to run detection on full data
       LOOP
         raise notice 'Starting calculation for detector %', detector_id_iterator;
@@ -222,3 +226,9 @@ DO $$
     RAISE NOTICE 'TOTAL Duration = %', Delta;
     INSERT INTO anomaly_detection_durations(duration_in_seconds, is_total_duration) VALUES(Delta, TRUE);
   END $$;
+
+
+-- ANALYSIS QUERIES --
+SELECT * FROM detected_anomalies WHERE checked_detector_id<101;
+SELECT * FROM anomaly_detection_durations WHERE checked_detector_id<101;
+SELECT SUM(duration_in_seconds) FROM anomaly_detection_durations WHERE checked_detector_id<101;
