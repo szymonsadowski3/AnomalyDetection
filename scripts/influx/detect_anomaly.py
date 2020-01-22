@@ -5,7 +5,7 @@ import time
 
 ### CFG ###
 
-FREQUENCY_THRESHOLD = 100
+FREQUENCY_THRESHOLD = 1000
 
 ### InfluxDB info ####
 influx_db_name = "sensors"
@@ -44,9 +44,9 @@ dataQuery = (
     INTO "sensors".."anomalies"
     FROM 
     (
-        SELECT difference(count) as diff from "sensors".."traffic" where detector_id = {}
+        SELECT difference(count) as diff from "sensors".."traffic" where detector_id = '{}' group by detector_id
     )
-    WHERE ({} diff < {} or diff > {}) and detector_id = {}
+    WHERE ({} (diff < {} or diff > {}) and detector_id = '{}') group by detector_id
     """
 )
 
@@ -64,7 +64,7 @@ def populate_diff_occurrence_for_detector(detector):
 
     distinct_diffs_query = """
         SELECT DISTINCT(traffic_diff) FROM (
-            SELECT difference(count) AS traffic_diff from "sensors".."traffic" WHERE "detector_id" = '{}'
+            SELECT difference(count) AS traffic_diff from "sensors".."traffic" WHERE detector_id = '{}'
         ) GROUP BY traffic_diff
     """.format(detector['detector_id'])
 
@@ -73,17 +73,16 @@ def populate_diff_occurrence_for_detector(detector):
     for distinct_object in distinct_diffs:
         diff_value = distinct_object['distinct']
         count_query = """
-            SELECT COUNT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic") WHERE 
+            SELECT COUNT(traffic_diff) FROM (SELECT difference(count) AS traffic_diff from "sensors".."traffic" where detector_id = '{}') WHERE 
             traffic_diff={}
-        """.format(diff_value)
-
+        """.format(detector_id, diff_value)
         how_many_occurences = list(influxClient.query(count_query))[0][0]['count']
         nested_set(occurences_aggregation, [detector_id, diff_value], how_many_occurences)
 
 
 def get_potential_anomaly_values_based_on_occurrence_frequency(detector_id):
     frequences = occurences_aggregation[detector_id]
-
+    print(frequences)
     return sorted([key for key, value in frequences.items() if value <= FREQUENCY_THRESHOLD])
 
 
@@ -99,6 +98,7 @@ for detector in detectors:
 
     populate_diff_occurrence_for_detector(detector)
     result = list(thresholds.get_points(tags=detector))
+    print('Frequency threshold is {}'.format(FREQUENCY_THRESHOLD))
 
     if len(result) > 0:
         potential_anomaly_values = get_potential_anomaly_values_based_on_occurrence_frequency(detector['detector_id'])
@@ -113,9 +113,11 @@ for detector in detectors:
             detector['detector_id'],
             potential_anomaly_values_filter,
             threshold_dict['lower_threshold'],
-            threshold_dict['upper_threshold']
+            threshold_dict['upper_threshold'],
+            detector['detector_id']
         )
         print(insertQuery)
+
         influxClient.query(insertQuery)
 
     end = time.time()

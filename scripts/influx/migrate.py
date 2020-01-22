@@ -57,7 +57,7 @@ def generate_influx_points(records):
 curr = conn.cursor('cursor', cursor_factory=psycopg2.extras.RealDictCursor)
 # curr = conn.cursor(dictionary=True)
 curr.execute("SELECT * FROM " + schema['table_name_to_measurement'] +
-             " WHERE detector_id in (1,2,3,4,5,6,7,8,9,10) ORDER BY " + schema['time_column'])
+             " WHERE detector_id in (1,2) ORDER BY " + schema['time_column'])
 row_count = 0
 # process 1000 records at a time
 while True:
