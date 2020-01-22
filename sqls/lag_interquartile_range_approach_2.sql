@@ -210,7 +210,7 @@ DO $$
 
     FOR detector_id_iterator IN
       SELECT * FROM detector_ids ORDER BY 1
-      LIMIT 10
+--       LIMIT 10
       -- comment out limit if you want to run detection on full data
       LOOP
         raise notice 'Starting calculation for detector %', detector_id_iterator;
