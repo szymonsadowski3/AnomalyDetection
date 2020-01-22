@@ -120,6 +120,8 @@ for detector in detectors:
 
         influxClient.query(insertQuery)
 
+        
+
     end = time.time()
     print("Finished! Detected anomalies for detector {} in time [s] = {} \n".format(detector['detector_id'], end-start))
 

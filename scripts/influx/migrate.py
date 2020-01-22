@@ -52,12 +52,13 @@ def generate_influx_points(records):
         })
     return influx_points
 
+detector_ids = tuple([i for i in range(1,101)])
 
 # query relational DB for all records
 curr = conn.cursor('cursor', cursor_factory=psycopg2.extras.RealDictCursor)
 # curr = conn.cursor(dictionary=True)
 curr.execute("SELECT * FROM " + schema['table_name_to_measurement'] +
-             " WHERE detector_id in (1,2) ORDER BY " + schema['time_column'])
+             " WHERE detector_id in {} ORDER BY ".format(detector_ids) + schema['time_column'])
 row_count = 0
 # process 1000 records at a time
 while True:
