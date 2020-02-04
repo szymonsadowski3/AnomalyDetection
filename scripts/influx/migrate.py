@@ -1,10 +1,5 @@
-### MySQL DB info ###
-#import MySQLdb
-# conn = MySQLdb.connect(host="localhost",  # your host, usually localhost
-#                     user="john",         # your username
-#                     passwd="megajonhy",  # your password
-#                     db="jonhydb")        # name of the data base
-
+NO_SENSORS = 100
+# change to change the number of sensors migrated to influx
 
 ### PostgreSQL DB info ###
 from influxdb import InfluxDBClient
@@ -52,7 +47,8 @@ def generate_influx_points(records):
         })
     return influx_points
 
-detector_ids = tuple([i for i in range(1,101)])
+
+detector_ids = tuple([i for i in range(1,NO_SENSORS+1)])
 
 # query relational DB for all records
 curr = conn.cursor('cursor', cursor_factory=psycopg2.extras.RealDictCursor)
